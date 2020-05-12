@@ -13,7 +13,6 @@ import (
 )
 
 var waitgroup sync.WaitGroup
-var httpRunning bool = false
 
 //Retreiving JSON response from NASA
 func getNasaData(nasaUrl string) []byte {
@@ -61,6 +60,7 @@ func (lst myTcpListener) Accept() (c net.Conn, err error) {
 	}
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(1 * time.Minute)
+
 	return tc, nil
 }
 
@@ -77,16 +77,15 @@ func myHTTPServer(addr string, handler http.Handler) (sc io.Closer, err error) {
 	go func() {
 
 		waitgroup.Add(1)
-		httpRunning = true
 
 		err := srv.Serve(myTcpListener{listener.(*net.TCPListener)})
 
-		if err != nil && httpRunning {
+		if err != http.ErrServerClosed {
 			panic(err)
 		}
-		if httpRunning {
-			waitgroup.Done()
-		}
+
+		waitgroup.Done()
+
 	}()
 
 	return listener, nil
@@ -101,7 +100,6 @@ func myReqHandler(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte(out))
 	} else if len(req.URL.Path) >= 5 && req.URL.Path[0:5] == "/quit" {
 		w.Write([]byte("Buy ! I'm too tired"))
-		httpRunning = false
 		waitgroup.Done()
 	} else {
 		w.Write([]byte("Hey! Seems like you asked about something I know nonthing about"))
@@ -125,7 +123,6 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		httpRunning = false
 		waitgroup.Done()
 	}()
 
