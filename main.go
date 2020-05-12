@@ -15,6 +15,7 @@ import (
 var waitgroup sync.WaitGroup
 var httpRunning bool = false
 
+//Retreiving JSON response from NASA
 func getNasaData(nasaUrl string) []byte {
 	response, err := http.Get(nasaUrl)
 	if err != nil {
@@ -51,7 +52,7 @@ type myTcpListener struct {
 	*net.TCPListener
 }
 
-// Implementing Accept , I'm sick of wating when port is busy
+// Implementing Accept , I'm sick of wating when port is busy after closing app
 // lets close it correctly
 func (lst myTcpListener) Accept() (c net.Conn, err error) {
 	tc, err := lst.AcceptTCP()
@@ -67,10 +68,6 @@ func myHTTPServer(addr string, handler http.Handler) (sc io.Closer, err error) {
 
 	var listener net.Listener
 	srv := &http.Server{Addr: addr, Handler: handler}
-
-	if addr == "" {
-		addr = ":https"
-	}
 
 	listener, err = net.Listen("tcp", addr)
 	if err != nil {
@@ -96,7 +93,7 @@ func myHTTPServer(addr string, handler http.Handler) (sc io.Closer, err error) {
 }
 
 //Handler that will help use to handle each path separatly
-func myHandler(w http.ResponseWriter, req *http.Request) {
+func myReqHandler(w http.ResponseWriter, req *http.Request) {
 
 	//fmt.Println(req.URL.Path)
 	if req.URL.Path == "/insight_weather/" {
@@ -108,16 +105,22 @@ func myHandler(w http.ResponseWriter, req *http.Request) {
 		waitgroup.Done()
 	} else {
 		w.Write([]byte("Hey! Seems like you asked about something I know nonthing about"))
-
 	}
 
 }
 
 func main() {
 
-	lc, err := myHTTPServer(":8888", http.HandlerFunc(myHandler))
+	lc, err := myHTTPServer(":9999", http.HandlerFunc(myReqHandler))
+
+	if err != nil {
+		panic(" Can't start local server " + err.Error())
+
+	}
+	//Gracefully close, meaning our message before close will be delivered
 	defer lc.Close()
-	/*Lets handle Ctrl C corectly */
+
+	/*Lets handle Ctrl C corectly via SIGTERM */
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -126,13 +129,6 @@ func main() {
 		waitgroup.Done()
 	}()
 
-	if err != nil {
-		panic(" Can't start local server " + err.Error())
-
-	}
-
 	waitgroup.Wait()
-
-	//Gracefully close, meaning our message before close will be delivered
 
 }
